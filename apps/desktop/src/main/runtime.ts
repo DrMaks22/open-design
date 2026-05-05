@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow, app, shell } from "electron";
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
@@ -193,15 +193,21 @@ function showWindowButtons(window: BrowserWindow): void {
   window.setWindowButtonVisibility(true);
 }
 
+function activateMacApp(): void {
+  if (process.platform !== "darwin") return;
+  app.focus({ steal: true });
+}
+
 // Windows focus-stealing prevention can leave a detached-spawned GUI
 // window minimized or hidden even when constructed with show:true,
 // leaving users unable to locate the window. Cross-platform safe: only
 // acts when the window is actually minimized or hidden, preserving any
 // user-adjusted window state.
-function ensureWindowVisible(window: BrowserWindow): void {
+export function ensureWindowVisible(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   if (!window.isVisible()) window.show();
+  activateMacApp();
   window.focus();
 }
 
@@ -362,8 +368,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     show() {
       if (!window.isDestroyed()) {
-        window.show();
-        window.focus();
+        ensureWindowVisible(window);
       }
     },
     status() {
