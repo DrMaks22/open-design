@@ -17,7 +17,7 @@ export type RawPackagedConfig = {
   appVersion?: string;
   namespace?: string;
   namespaceBaseRoot?: string;
-  nodeCommandRelative?: string;
+  nodeCommandRelative?: string | null;
   resourceRoot?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -70,6 +70,12 @@ function resolveOptionalPath(value: string | undefined): string | undefined {
   return value == null || value.length === 0 ? undefined : resolve(value);
 }
 
+function resolveOptionalRelativePath(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 // Config DTOs use null for optional scalar values consumed by runtime options;
 // optional paths use undefined so callers can distinguish "no path" from a resolved path string.
 function cleanOptionalString(value: string | undefined): string | null {
@@ -107,9 +113,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     resolveOptionalPath(raw.namespaceBaseRoot) ?? join(app.getPath("userData"), "namespaces");
   const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
   const relativeNodeCommand =
-    raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
-      ? join("open-design", "bin", "node")
-      : raw.nodeCommandRelative;
+    resolveOptionalRelativePath(raw.nodeCommandRelative) ?? join("open-design", "bin", "node");
   const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
   const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);

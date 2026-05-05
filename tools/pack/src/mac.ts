@@ -70,6 +70,13 @@ type MacPaths = {
   zipPath: string;
 };
 
+export type MacPackagedConfig = {
+  appVersion: string;
+  namespace: string;
+  namespaceBaseRoot?: string;
+  webOutputMode: ToolPackConfig["webOutputMode"];
+};
+
 export type MacPackResult = {
   appPath: string;
   dmgPath: string | null;
@@ -419,6 +426,31 @@ async function copyResourceTree(config: ToolPackConfig, paths: MacPaths): Promis
   await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await cp(process.execPath, join(paths.resourceRoot, "bin", "node"));
   await chmod(join(paths.resourceRoot, "bin", "node"), 0o755);
+
+  const nodeInstallLibRoot = join(dirname(dirname(process.execPath)), "lib");
+  const libNodeCandidates = (await readdir(nodeInstallLibRoot).catch(() => [])).filter((entry) =>
+    /^libnode\.[^/]+\.dylib$/.test(entry),
+  );
+  if (libNodeCandidates.length !== 1 || libNodeCandidates[0] == null) {
+    throw new Error(`expected exactly one libnode dylib in ${nodeInstallLibRoot}, found ${libNodeCandidates.length}`);
+  }
+  await mkdir(join(paths.resourceRoot, "lib"), { recursive: true });
+  await cp(
+    join(nodeInstallLibRoot, libNodeCandidates[0]),
+    join(paths.resourceRoot, "lib", libNodeCandidates[0]),
+  );
+}
+
+export function buildMacPackagedConfig(
+  config: ToolPackConfig,
+  packagedVersion: string,
+): MacPackagedConfig {
+  return {
+    appVersion: packagedVersion,
+    namespace: config.namespace,
+    ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
+    webOutputMode: config.webOutputMode,
+  };
 }
 
 async function collectWorkspaceTarballs(
@@ -492,17 +524,7 @@ async function writeAssembledApp(
   );
   await writeFile(
     paths.packagedConfigPath,
-    `${JSON.stringify(
-      {
-        appVersion: packagedVersion,
-        namespace: config.namespace,
-        nodeCommandRelative: "open-design/bin/node",
-        webOutputMode: config.webOutputMode,
-        ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(buildMacPackagedConfig(config, packagedVersion), null, 2)}\n`,
     "utf8",
   );
   await runNpmInstall(paths.assembledAppRoot);
